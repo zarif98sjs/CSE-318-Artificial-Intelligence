@@ -13,29 +13,38 @@ from typing import Protocol, Dict, List, Iterator, Tuple, TypeVar, Optional
 
 T = TypeVar('T')
 
+
 class PriorityQueue:
     def __init__(self):
-        self.elements: List[Tuple[float, T]] = []
+        self.elements: List[Tuple[np.int64, T]] = []
 
     def empty(self) -> bool:
         return not self.elements
 
-    def put(self, element: T, priority: float):
+    def put(self, element: T, priority: np.int64):
         heapq.heappush(self.elements, (priority, element))
 
     def get(self) -> T:
         ret = heapq.heappop(self.elements)
         return (ret[1], ret[0])
 
+    def getLength(self):
+        return len(self.elements)
+
+try:
+    import Queue as Q  # ver. < 3.0
+except ImportError:
+    import queue as Q
+
 class Node:
-    def __init__(self,curBoard,prevBoard,move,cost):
+    def __init__(self, curBoard, prevBoard, move, cost):
         self.curBoard = curBoard
         self.prevBoard = prevBoard
         self.move = move
         self.cost = cost
 
     def __lt__(self, other):
-        return self.cost < other.cost
+        return self.move < other.move
 
 
 class PushButton(QPushButton):
@@ -66,98 +75,86 @@ class Solver:
     def hash(self, grid):
         return tuple({tuple(row) for row in grid})
 
-    def solveBrute(self):
-        print(self.board)
-        print(self.boardTarget)
-
-        pq = PriorityQueue()
-        pq.put(self.board, 0)
-
-        visited = set()
-        visited.add(self.hash(self.board))
-
-        while not pq.empty():
-
-            cur, curCost = pq.get()
-
-            if (cur == self.boardTarget).all():
-                print("Target found")
-                print("Cost ", curCost)
-                break
-
-            for r in range(self.N):
-                for c in range(self.N):
-                    if cur[r][c] == 0:
-                        for i in range(4):
-                            if self.withinGrid(r + self.dX[i], c + self.dY[i]):
-                                newCost = curCost + 1
-
-                                ## create next grid by swapping
-                                nextGrid = cur.copy()
-                                temp = nextGrid[r + self.dX[i]][c + self.dY[i]]
-                                nextGrid[r + self.dX[i]][c + self.dY[i]] = nextGrid[r][c]
-                                nextGrid[r][c] = temp
-
-                                if self.hash(nextGrid) in visited:
-                                    continue
-
-                                # if not vis:
-                                visited.add(self.hash(nextGrid))
-                                priority = newCost
-                                pq.put(nextGrid, priority)
-
-        print("Done")
-
     def h_1_hammingDistance(self, boardNow):
         cnt = 0
         for i in range(self.N):
             for j in range(self.N):
-                if self.boardTarget[i][j] != 0:
-                    cnt += (boardNow[i][j] != self.boardTarget[i][j])
+                if self.boardTarget[i][j] != 0 and boardNow[i][j] != self.boardTarget[i][j]:
+                    cnt += 1
         return cnt
 
-    def getPos(self,digit,boardNow):
+    def getPos(self, digit, boardNow):
         N = boardNow.shape[0]
         for i in range(N):
             for j in range(N):
                 if boardNow[i][j] == digit:
-                    return i,j
+                    return i, j
 
-    def h_2_manhattanDistance(self,boardNow):
+    def h_2_manhattanDistance(self, boardNow):
         cnt = 0
-        for d in range(1,self.N*self.N):
-            r1 , c1 = self.getPos(d,boardNow)
-            r2 , c2 = self.getPos(d,self.boardTarget)
-            cnt += abs(r1-r2) + abs(c1-c2)
+        for d in range(1, self.N * self.N):
+            r1, c1 = self.getPos(d, boardNow)
+            r2, c2 = self.getPos(d, self.boardTarget)
+            cnt += abs(r1 - r2) + abs(c1 - c2)
         return cnt
+
+    def linearConflict(self, boardNow):
+        posAtTarget = {}
+        N = boardNow.shape[0]
+        for i in range(N):
+            for j in range(N):
+                d = self.boardTarget[i][j]
+                if d != 0:
+                    posAtTarget[d] = (i, j)
+
+        cnt = 0
+        for i in range(N):
+            for j in range(N):
+                for k in range(j + 1, N):
+
+                    d1 = boardNow[i][j]
+                    d2 = boardNow[i][k]
+
+                    if d1 == 0 or d2 == 0:
+                        continue
+
+                    if i == posAtTarget[d1][0] and i == posAtTarget[d2][0] and posAtTarget[d1][1] > posAtTarget[d2][1]:
+                        cnt += 1
+        return cnt
+
+    def h_3_linearConflict(self, boardNow):
+        return self.h_2_manhattanDistance(boardNow) + 2 * self.linearConflict(boardNow)
 
     def solveAStar(self, heuristic):
 
-        print(self.board)
-        print(self.boardTarget)
+        pq = Q.PriorityQueue()
+        pq.put((0,Node(self.board, None, 0, 0)))
 
-        pq = PriorityQueue()
-        pq.put(Node(self.board,None,0,0), 0)
-
-        visited = set(); D = {}
+        # visited = set()
+        expanded = set()
+        # D = {}
         hashBoard = self.hash(self.board)
-        visited.add(hashBoard)
-        D[hashBoard] = 0
+        # visited.add(hashBoard)
+        # D[hashBoard] = 0
 
         while not pq.empty():
 
-            curNode, curCost = pq.get()
+            curCost, curNode = pq.get()
             cur = curNode.curBoard
+            curHash = self.hash(cur)
+            expanded.add(curHash)
+
+            # print(curNode.move)
 
             if (cur == self.boardTarget).all():
-                print("Target found")
-                print("Cost ", curCost)
+                # print("Target found")
+                # print("Cost ", curCost)
                 print("Move ", curNode.move)
                 break
 
-            ## optimization
-            if curCost > D[self.hash(cur)]:
-                continue
+            # optimization
+            # if curCost > D[curHash]:
+            #     continue
 
             for r in range(self.N):
                 for c in range(self.N):
@@ -165,31 +162,43 @@ class Solver:
                         for i in range(4):
                             if self.withinGrid(r + self.dX[i], c + self.dY[i]):
 
-                                ## create next grid by swapping
+                                # create next grid by swapping
                                 nextGrid = cur.copy()
                                 temp = nextGrid[r + self.dX[i]][c + self.dY[i]]
                                 nextGrid[r + self.dX[i]][c + self.dY[i]] = nextGrid[r][c]
                                 nextGrid[r][c] = temp
                                 hashNextGrid = self.hash(nextGrid)
 
-                                ## calculate priority
+                                # calculate priority
                                 newMove = curNode.move + 1
                                 priority = newMove + heuristic(nextGrid)
 
-                                ## if not visited yet or visited before but optimal now
-                                if hashNextGrid not in visited or priority <= D[hashNextGrid]:
-                                    visited.add(hashNextGrid)
-                                    pq.put(Node(nextGrid,cur,newMove,priority), priority)
-                                    D[hashNextGrid] = priority
+                                # if hashNextGrid not in expanded:
 
-        print("A Star Done")
+
+                                # if not visited yet or visited before but optimal now
+                                if hashNextGrid not in expanded:
+                                    expanded.add(hashNextGrid)
+                                    pq.put((priority,Node(nextGrid, cur, newMove, priority)))
+                                    # D[hashNextGrid] = priority
+
+
+        # print("A Star Done")
+        # explored_len = len(expanded)
+        expanded_len = len(expanded)
+        # print("Explored Nodes : ", explored_len)
+        print("Expanded Nodes : ", expanded_len)
 
     def solve(self):
-        # print("Using Hamming Distance")
-        # self.solveAStar(self.h_1_hammingDistance)
 
         print("Using Manhattan Distance")
         self.solveAStar(self.h_2_manhattanDistance)
+
+        print("Using Hamming Distance")
+        self.solveAStar(self.h_1_hammingDistance)
+
+        print("Using Linear Conflict")
+        self.solveAStar(self.h_3_linearConflict)
 
 
 class MyWindow(QMainWindow):
@@ -274,6 +283,39 @@ class MyWindow(QMainWindow):
         # self.label.setNum(num)
 
 
+def getTargetBoard(N):
+    _list = []
+    for i in range(1, N * N):
+        _list.append(i)
+    _list.append(0)
+    # print(_list)
+    return np.reshape(_list, (N, N))
+
+
+def takeInputFromFile(n):
+    with open("input.txt") as f:
+        array = [row.split() for row in f]
+    for i in range(n):
+        for j in range(n):
+            if array[i][j] == '*':
+                array[i][j] = 0
+            else:
+                array[i][j] = np.int64(array[i][j])
+    array = np.array(array)
+    return array.astype(np.int64)
+
+
+def takeInputFromConsole(n):
+    array = np.array([input().strip().split() for _ in range(n)])
+    for i in range(n):
+        for j in range(n):
+            if array[i][j] == '*':
+                array[i][j] = 0
+            else:
+                array[i][j] = np.int64(array[i][j])
+    return array.astype(np.int64)
+
+
 if __name__ == '__main__':
     # app = QApplication(sys.argv)
     # w = MyWindow()
@@ -285,42 +327,26 @@ if __name__ == '__main__':
     test without gui
     '''
 
-    # N = 2
-    # grid = np.zeros(shape=(N, N), dtype=int)
+    # k = int(input("K = ? "))
+    k = 8
+    n = int(np.sqrt(k + 1))
+    print("N -> ", n)
 
-    # D = {}
-    # D[grid.tobytes()] = 10
-    # print(D[grid.tobytes()])
+    print("Give the board as input")
 
-    # idx = 1
-    # for row in range(N):
-    #     for column in range(N):
-    #         grid[row][column] = idx%(N*N)
-    #         idx += 1
-    # gridTarget = grid.copy()
-    # np.random.shuffle(grid)
-    # print(grid)
+    grid = takeInputFromFile(n)
+    gridTarget = getTargetBoard(n)
+
+    print("Input State\n", grid)
+    print("Target State\n", gridTarget)
 
     # grid = np.array([[1,2,3],[4,0,6],[7,5,8]],np.int32)
     # grid = np.array([[0,1,3],[4,2,5],[7,8,6]],np.int32)
     # grid = np.array([[8, 1, 3], [4, 0, 2], [7, 6, 5]], np.int32)  ## 14
-    grid = np.array([[1,3,2],[4,6,5],[7,8,0]],np.int32) ## 18
-
-    gridNow = np.array([[7,2,4],[6,0,5],[8,3,1]],np.int32)
-    gridTarget = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 0]], np.int32)
-
-    solver = Solver(3, grid, gridTarget)
-
-    solver.solve()
-    # print(solver.h_2_manhattanDistance(gridNow))
-
-    # pq = PriorityQueue()
-    # pq.put("asd",12)
-    # pq.put("asdasdas",1)
-    # pq.put("asafd",4)
-    # pq.put("sadd",2)
+    # grid = np.array([[1,3,2],[4,6,5],[7,8,0]],np.int32) ## 18
     #
-    # print(pq.get())
-    # print(pq.get())
-    # print(pq.get())
-    # print(pq.get())
+    # gridNow = np.array([[7,2,4],[6,0,5],[8,3,1]],np.int32)
+    # gridTarget = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 0]], np.int32)
+    #
+    solver = Solver(n, grid, gridTarget)
+    solver.solve()
