@@ -41,15 +41,16 @@ vector<vector<int>> getTargetGrid(int n)
     vector<vector<int>> grid(n,vector<int>(n,0));
 
     int cnt = 1;
-    for(int i=0;i<n;i++)
-        for(int j=0;j<n;j++)
-            grid[i][j] = cnt , cnt++;
+    for(int i=0; i<n; i++)
+        for(int j=0; j<n; j++)
+            grid[i][j] = cnt, cnt++;
 
     grid[n-1][n-1] = 0;
     return grid;
 }
 
-struct Node{
+struct Node
+{
     vector<vector<int>> board;
     vector<vector<int>> parBoard;
     int MOVE;
@@ -66,13 +67,13 @@ struct Node{
 
 };
 
-/// Overload the < operator.
+//Overload the < operator.
 bool operator < (const Node& node1, const Node &node2)
 {
     return node1.PRI < node2.PRI;
 }
 
-/// Overload the > operator.
+//Overload the < operator.
 bool operator > (const Node& node1, const Node &node2)
 {
     return node1.PRI > node2.PRI;
@@ -82,417 +83,162 @@ vector<int> dr = {-1,0,1,0};
 vector<int> dc = {0,1,0,-1};
 
 
-struct Solver{
 
-    int N;
-    vector<vector<int>> board;
-    vector<vector<int>> boardTarget;
+int N;
+vector<vector<int>> board;
+vector<vector<int>> boardTarget;
 
-    map<int,PII> posTarget;
-    map<vector<vector<int>>, vector<vector<int>>> PARENT;
+map<int,PII> posTarget;
 
-    Solver(int N,vector<vector<int>> board,vector<vector<int>> boardTarget)
+bool isOk(int r,int c)
+{
+    if (r < 0 || c <0)
+        return false;
+    if (r >= N || c >= N)
+        return false;
+    return true;
+}
+
+int h1_hammingDistance(vector<vector<int>> grid)
+{
+    int cnt = 0;
+    for(int i=0; i<N; i++)
     {
-        this->N = N;
-        this->board = board;
-        this->boardTarget = boardTarget;
-
-        for(int i=0;i<N;i++)
+        for(int j=0; j<N; j++)
         {
-            for(int j=0;j<N;j++)
-            {
-                int d = boardTarget[i][j];
+            if(boardTarget[i][j] == 0)
+                continue;
 
-                if(d == 0)
+            if(grid[i][j] != boardTarget[i][j])
+                cnt++;
+        }
+    }
+
+    return cnt;
+}
+
+int h2_manhattanDistance(vector<vector<int>> grid)
+{
+    map<int,PII> posNow;
+
+    for(int i=0; i<N; i++)
+    {
+        for(int j=0; j<N; j++)
+        {
+            int d = grid[i][j];
+            posNow[d] = {i,j};
+        }
+    }
+
+    int cnt = 0;
+    for(int d=1; d<N*N; d++)
+    {
+        cnt += abs(posNow[d].F-posTarget[d].F) + abs(posNow[d].S-posTarget[d].S);
+    }
+
+    return cnt;
+}
+
+int linearConflict(vector<vector<int>> grid)
+{
+    int cnt = 0;
+    for(int i=0; i<N; i++)
+    {
+        for(int j=0; j<N; j++)
+        {
+            for(int k=j+1; k<N; k++)
+            {
+                int d1 = grid[i][j];
+                int d2 = grid[i][k];
+
+                if(d1 == 0 || d2 == 0)
                     continue;
 
-                posTarget[d] = {i,j};
-            }
-        }
-    }
-
-    bool isSolvable()
-    {
-        vector<int>v;
-        for(auto row:board)
-            for(int el:row)
-                if(el != 0)
-                    v.push_back(el);
-
-        int inv = 0;
-
-        int n = (int)v.size();
-        for(int i=0;i<n;i++)
-        {
-            for(int j=i+1;j<n;j++)
-            {
-                if(v[j] < v[i])
-                    inv++;
-            }
-        }
-
-        /// inversion count done
-
-        if(N%2 == 1)
-        {
-            /// odd
-            if(inv % 2 == 1) return false;
-            else return true;
-        }
-        else
-        {
-            int whichRow = 0;
-
-            bool gotIt = false;
-            for(int i=N-1;i>=0;i--)
-            {
-                whichRow++;
-                for(int j=N-1;j>=0;j--)
-                {
-                    if(board[i][j] == 0)
-                    {
-                        gotIt = true;
-                        break;
-                    }
-                }
-
-                if(gotIt)
-                    break;
-            }
-
-            if(whichRow % 2 == 0 && inv % 2 == 1) return true;
-            else if(whichRow % 2 == 1 && inv % 2 == 0) return true;
-            else return false;
-        }
-    }
-
-    bool isOk(int r,int c)
-    {
-        if (r < 0 || c <0) return false;
-        if (r >= N || c >= N) return false;
-        return true;
-    }
-
-    int h1_hammingDistance(vector<vector<int>> grid)
-    {
-        int cnt = 0;
-        for(int i=0;i<N;i++)
-        {
-            for(int j=0;j<N;j++)
-            {
-                if(boardTarget[i][j] == 0)
-                    continue;
-
-                if(grid[i][j] != boardTarget[i][j])
+                if(i == posTarget[d1].F && i == posTarget[d2].F && posTarget[d1].S > posTarget[d2].S && d1>d2)
                     cnt++;
             }
         }
-
-        return cnt;
     }
+    return cnt;
+}
 
-    int h2_manhattanDistance(vector<vector<int>> grid)
+int h3_linearConflict(vector<vector<int>> grid)
+{
+    return h2_manhattanDistance(grid) + 2 * linearConflict(grid);
+}
+
+
+template<typename T>
+void solveAStar(T func)
+{
+    function<int(vector<vector<int>>)> heuristic = func;
+
+    priority_queue< Node,vector<Node>,greater<Node> >pq;
+
+    vector<vector<int>>par(N,vector<int>(N,0));
+
+    set<vector<vector<int>>>closed;
+    pq.push(Node(board,par,0,0));
+
+    while(!pq.empty())
     {
-        map<int,PII> posNow;
+        Node curNode = pq.top();
+        pq.pop();
 
-        for(int i=0;i<N;i++)
+        vector<vector<int>> curBoard = curNode.board;
+
+        if(closed.count(curBoard))
+            continue;
+
+        closed.insert(curBoard);
+
+        if(curBoard == boardTarget)
         {
-            for(int j=0;j<N;j++)
-            {
-                int d = grid[i][j];
-                posNow[d] = {i,j};
-            }
+            cout<<"Number of moves : "<<curNode.MOVE<<endl;
+            break;
         }
 
-        int cnt = 0;
-        for(int d=1;d<N*N;d++)
+        for(int r=0; r<N; r++)
         {
-            cnt += abs(posNow[d].F-posTarget[d].F) + abs(posNow[d].S-posTarget[d].S);
-        }
-
-        return cnt;
-    }
-
-    int linearConflict(vector<vector<int>> grid)
-    {
-        int cnt = 0;
-        for(int i=0;i<N;i++)
-        {
-            for(int j=0;j<N;j++)
+            for(int c=0; c<N; c++)
             {
-                for(int k=j+1;k<N;k++)
+                if(curBoard[r][c] == 0)
                 {
-                    int d1 = grid[i][j];
-                    int d2 = grid[i][k];
-
-                    if(d1 == 0 || d2 == 0)
-                        continue;
-
-                    if(i == posTarget[d1].F && i == posTarget[d2].F && posTarget[d1].S > posTarget[d2].S && d1>d2)
-                        cnt++;
-                }
-            }
-        }
-        return cnt;
-    }
-
-    int h3_linearConflict(vector<vector<int>> grid)
-    {
-        return h2_manhattanDistance(grid) + 2 * linearConflict(grid);
-    }
-
-
-    void solveAStar_1()
-    {
-        priority_queue< Node,vector<Node>,greater<Node> >pq;
-        PARENT.clear();
-
-        vector<vector<int>>par(N,vector<int>(N,0));
-
-        set<vector<vector<int>>>closed;
-        pq.push(Node(board,par,0,0));
-        PARENT[board] = par;
-
-        int exploredCount = 1;
-
-        while(!pq.empty())
-        {
-            Node curNode = pq.top();
-            pq.pop();
-
-            vector<vector<int>> curBoard = curNode.board;
-
-            if(closed.count(curBoard))
-                continue;
-
-            if(curBoard == boardTarget)
-            {
-                cout<<"Number of moves : "<<curNode.MOVE<<endl;
-                break;
-            }
-
-            closed.insert(curBoard);
-
-            for(int r=0;r<N;r++)
-            {
-                for(int c=0;c<N;c++)
-                {
-                    if(curBoard[r][c] == 0)
+                    for(int i=0; i<4; i++)
                     {
-                        for(int i=0;i<4;i++)
+                        int newR = r + dr[i];
+                        int newC = c + dc[i];
+
+                        if(isOk(newR,newC))
                         {
-                            int newR = r + dr[i];
-                            int newC = c + dc[i];
+                            vector<vector<int>> nextBoard = curBoard;
+                            swap(nextBoard[r][c],nextBoard[newR][newC]);
 
-                            if(isOk(newR,newC))
-                            {
-                                vector<vector<int>> nextBoard = curBoard;
-                                swap(nextBoard[r][c],nextBoard[newR][newC]);
+                            int newMOVE = curNode.MOVE + 1;
+                            int newPRI = newMOVE + heuristic(nextBoard);
 
-                                int newMOVE = curNode.MOVE + 1;
-                                int newPRI = newMOVE + h1_hammingDistance(nextBoard);
-
-                                if(closed.count(nextBoard))
-                                    continue;
+                            if(closed.count(nextBoard))
+                                continue;
 
 //                                closed.insert(nextBoard);
-                                pq.push(Node(nextBoard,curBoard,newMOVE,newPRI));
-                                PARENT[nextBoard] = curBoard;
-                                exploredCount++;
-                            }
+                            pq.push(Node(nextBoard,curBoard,newMOVE,newPRI));
                         }
                     }
                 }
             }
         }
-
-        cout<<"Expanded nodes : "<<closed.size()<<endl;
-        cout<<"Explored nodes : "<<exploredCount<<endl;
-
-        printMoves();
     }
+}
 
-    void solveAStar_2()
-    {
-        priority_queue< Node,vector<Node>,greater<Node> >pq;
-        PARENT.clear();
-
-        vector<vector<int>>par(N,vector<int>(N,0));
-
-        set<vector<vector<int>>>closed;
-        pq.push(Node(board,par,0,0));
-        PARENT[board] = par;
-
-        int exploredCount = 1;
-
-        while(!pq.empty())
-        {
-            Node curNode = pq.top();
-            pq.pop();
-
-            vector<vector<int>> curBoard = curNode.board;
-
-            if(closed.count(curBoard))
-                continue;
-
-            if(curBoard == boardTarget)
-            {
-                cout<<"Number of moves : "<<curNode.MOVE<<endl;
-                break;
-            }
-
-            closed.insert(curBoard);
-
-            for(int r=0;r<N;r++)
-            {
-                for(int c=0;c<N;c++)
-                {
-                    if(curBoard[r][c] == 0)
-                    {
-                        for(int i=0;i<4;i++)
-                        {
-                            int newR = r + dr[i];
-                            int newC = c + dc[i];
-
-                            if(isOk(newR,newC))
-                            {
-                                vector<vector<int>> nextBoard = curBoard;
-                                swap(nextBoard[r][c],nextBoard[newR][newC]);
-
-                                int newMOVE = curNode.MOVE + 1;
-                                int newPRI = newMOVE + h2_manhattanDistance(nextBoard);
-
-                                if(closed.count(nextBoard))
-                                    continue;
-
-//                                closed.insert(nextBoard);
-                                pq.push(Node(nextBoard,curBoard,newMOVE,newPRI));
-                                PARENT[nextBoard] = curBoard;
-                                exploredCount++;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        cout<<"Expanded nodes : "<<closed.size()<<endl;
-        cout<<"Explored nodes : "<<exploredCount<<endl;
-
-        printMoves();
-    }
-
-
-    void solveAStar_3()
-    {
-        priority_queue< Node,vector<Node>,greater<Node> >pq;
-        PARENT.clear();
-
-        vector<vector<int>>par(N,vector<int>(N,0));
-
-        set<vector<vector<int>>>closed;
-        pq.push(Node(board,par,0,0));
-        PARENT[board] = par;
-
-        int exploredCount = 1;
-
-        while(!pq.empty())
-        {
-            Node curNode = pq.top();
-            pq.pop();
-
-            vector<vector<int>> curBoard = curNode.board;
-
-            if(closed.count(curBoard))
-                continue;
-
-            if(curBoard == boardTarget)
-            {
-                cout<<"Number of moves : "<<curNode.MOVE<<endl;
-                break;
-            }
-
-            closed.insert(curBoard);
-
-            for(int r=0;r<N;r++)
-            {
-                for(int c=0;c<N;c++)
-                {
-                    if(curBoard[r][c] == 0)
-                    {
-                        for(int i=0;i<4;i++)
-                        {
-                            int newR = r + dr[i];
-                            int newC = c + dc[i];
-
-                            if(isOk(newR,newC))
-                            {
-                                vector<vector<int>> nextBoard = curBoard;
-                                swap(nextBoard[r][c],nextBoard[newR][newC]);
-
-                                int newMOVE = curNode.MOVE + 1;
-                                int newPRI = newMOVE + h3_linearConflict(nextBoard);
-
-                                if(closed.count(nextBoard))
-                                    continue;
-
-//                                closed.insert(nextBoard);
-                                pq.push(Node(nextBoard,curBoard,newMOVE,newPRI));
-                                PARENT[nextBoard] = curBoard;
-                                exploredCount++;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        cout<<"Expanded nodes : "<<closed.size()<<endl;
-        cout<<"Explored nodes : "<<exploredCount<<endl;
-
-        printMoves();
-    }
-
-    void printMoves()
-    {
-        vector<vector<int>> now = boardTarget;
-        vector<vector<int>>par(N,vector<int>(N,0));
-
-        stack<vector<vector<int>>> stk;
-
-        while(now != par)
-        {
-            stk.push(now);
-            now = PARENT[now];
-        }
-        cout<<"Steps ... "<<endl;
-        while(!stk.empty())
-        {
-            cout<<stk.top()<<endl;
-            stk.pop();
-        }
-    }
-
-
-    void solve()
-    {
-        bool ok = isSolvable();
-        if(!ok)
-        {
-            cout<<"Not Solvable"<<endl;
-            return;
-        }
-
-
-        cout<<"<< Hamming Distance >>"<<endl;
-        solveAStar_1();
-        cout<<"<< Manhattan Distance >>"<<endl;
-        solveAStar_2();
-        cout<<"<< Linear Conflict >>"<<endl;
-        solveAStar_3();
-    }
-
-};
+void solve()
+{
+    cout<<"Hamming Distance"<<endl;
+    solveAStar(h1_hammingDistance);
+    cout<<"Manhattan Distance"<<endl;
+    solveAStar(h2_manhattanDistance);
+    cout<<"Linear Conflict"<<endl;
+    solveAStar(h3_linearConflict);
+}
 
 int to_num(string str)
 {
@@ -503,31 +249,50 @@ int to_num(string str)
     return x;
 }
 
+void calcPosTarget()
+{
+    for(int i=0; i<N; i++)
+    {
+        for(int j=0; j<N; j++)
+        {
+            int d = boardTarget[i][j];
+
+            if(d == 0)
+                continue;
+
+            posTarget[d] = {i,j};
+        }
+    }
+}
+
 void solveTC()
 {
-    int n;
-    cin>>n;
+    cin>>N;
 
-    vector<vector<int>> grid(n,vector<int>(n,0));
+    vector<vector<int>> grid(N,vector<int>(N,0));
 
-    for(int i=0;i<n;i++)
+    for(int i=0; i<N; i++)
     {
-        for(int j=0;j<n;j++)
+        for(int j=0; j<N; j++)
         {
             string s;
             cin>>s;
 
-            if(s == "*") grid[i][j] = 0;
-            else grid[i][j] = to_num(s);
+            if(s == "*")
+                grid[i][j] = 0;
+            else
+                grid[i][j] = to_num(s);
         }
     }
 
-//    cout<<grid<<endl;
-    vector<vector<int>> gridTarget = getTargetGrid(n);
-//    cout<<gridTarget<<endl;
+    cout<<grid<<endl;
+    vector<vector<int>> gridTarget = getTargetGrid(N);
+    cout<<gridTarget<<endl;
 
-    Solver solver(n,grid,gridTarget);
-    solver.solve();
+    board = grid;
+    boardTarget = gridTarget;
+
+    solve();
 
 }
 
@@ -535,12 +300,11 @@ int32_t main()
 {
     optimizeIO();
 
-    int tc;
-    cin>>tc;
+    int tc = 1;
+//    cin>>tc;
 
-    for(int i=1;i<=tc;i++)
+    while(tc--)
     {
-        cout<<"Case : "<<i<<endl;
         solveTC();
     }
 
@@ -580,3 +344,4 @@ ostream &operator <<(ostream &os, set<T>&v)
     os<<" ]";
     return os;
 }
+
